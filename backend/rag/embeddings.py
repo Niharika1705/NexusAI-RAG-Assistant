@@ -33,7 +33,7 @@ def get_embedding_model() -> Any:
         
         def embed_documents(self, texts: list[str]) -> list[list[float]]:
             headers = {"Authorization": f"Bearer {self.token}"}
-            resp = requests.post(self.url, headers=headers, json={"inputs": texts})
+            resp = requests.post(self.url, headers=headers, json={"inputs": texts}, timeout=30)
             if resp.status_code != 200:
                 raise ValueError(f"HF API Error: {resp.status_code} - {resp.text}")
             return resp.json()
