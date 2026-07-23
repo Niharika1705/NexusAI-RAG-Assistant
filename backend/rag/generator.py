@@ -30,7 +30,7 @@ def get_mistral_llm() -> ChatOpenAI:
     Enforces Requirement 9: temperature=0, max_tokens=400.
     """
     if not MISTRAL_API_KEY:
-        logger.warning("MISTRAL_API_KEY is not set in environment variables.")
+        raise ValueError("MISTRAL_API_KEY is missing! Please add it to your Streamlit Cloud Secrets or local .env file.")
 
     logger.info(f"Initializing Mistral LLM (model: {MISTRAL_MODEL}, temp=0, max_tokens=400)")
 
