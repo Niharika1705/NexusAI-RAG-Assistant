@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_KB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "knowledge_base"))
 
-def load_all_pdfs(kb_dir: str = DEFAULT_KB_DIR) -> List[Document]:
+def load_all_pdfs(kb_dir: str = DEFAULT_KB_DIR, session_id: str = None) -> List[Document]:
     """
     Reads all PDF files from the specified knowledge base directory.
     Uses PyPDFLoader and attaches clean source names and 1-indexed page numbers.
@@ -45,6 +45,9 @@ def load_all_pdfs(kb_dir: str = DEFAULT_KB_DIR) -> List[Document]:
                 
                 doc.metadata["source"] = clean_name
                 doc.metadata["page"] = page_num
+                if session_id:
+                    doc.metadata["session_id"] = session_id
+                
                 
             all_documents.extend(docs)
             logger.info(f"Successfully loaded {len(docs)} pages from '{os.path.basename(pdf_path)}'.")

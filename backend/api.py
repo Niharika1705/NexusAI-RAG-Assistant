@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title="NexusAI RAG Backend API",
-    description="Production-Ready RAG Chatbot API using LangChain, Chroma Cloud, Sentence Transformers & OpenRouter LLM.",
+    description="Production-Ready RAG Chatbot API using LangChain, Chroma Cloud, Sentence Transformers & Mistral LLM.",
     version="1.0.0"
 )
 
@@ -38,6 +38,7 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     question: str = Field(..., description="The user question to ask the RAG chatbot.")
     k: int = Field(5, description="Number of top chunks to retrieve.")
+    session_id: str = Field(None, description="Optional session ID for isolated multi-user queries.")
 
 class QueryResponse(BaseModel):
     answer: str
@@ -63,15 +64,15 @@ async def execute_query(request: QueryRequest):
     """
     Executes a RAG query:
     1. Retrieves top k relevant document chunks from Chroma Cloud.
-    2. Sends context and question to OpenRouter LLM.
+    2. Sends context and question to Mistral LLM.
     3. Returns answer along with exact source document names and page numbers.
     """
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
     
     try:
-        logger.info(f"Received query: '{request.question}' (k={request.k})")
-        result = query_rag(question=request.question, k=request.k)
+        logger.info(f"Received query: '{request.question}' (k={request.k}, session_id={request.session_id})")
+        result = query_rag(question=request.question, k=request.k, session_id=request.session_id)
         return QueryResponse(
             answer=result["answer"],
             sources=result["sources"]
@@ -83,7 +84,8 @@ async def execute_query(request: QueryRequest):
 @app.post("/api/ingest", response_model=IngestResponse, tags=["Knowledge Base Ingestion"])
 async def upload_and_ingest_pdf(
     file: UploadFile = File(...),
-    reset: bool = Query(True, description="Whether to clear existing vector collection before indexing")
+    reset: bool = Query(True, description="Whether to clear existing vector collection before indexing"),
+    session_id: str = Query(None, description="Optional session ID to isolate ingested files for a specific user.")
 ):
     """
     Uploads a new PDF file to backend/knowledge_base/ and runs the ingestion pipeline to index chunks into Chroma Cloud.
@@ -92,12 +94,18 @@ async def upload_and_ingest_pdf(
         raise HTTPException(status_code=400, detail="Only .pdf files are supported for ingestion.")
     
     try:
-        logger.info(f"Processing uploaded PDF: '{file.filename}' (reset={reset})")
+        logger.info(f"Processing uploaded PDF: '{file.filename}' (reset={reset}, session_id={session_id})")
+        
+        # Determine knowledge base directory based on session
+        kb_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "knowledge_base"))
+        if session_id:
+            kb_dir = os.path.join(kb_dir, session_id)
+            
         # Save file locally
-        file_path = save_uploaded_file(uploaded_file=file)
+        file_path = save_uploaded_file(uploaded_file=file, kb_dir=kb_dir)
         
         # Run ingestion pipeline
-        count = run_ingestion(reset=reset)
+        count = run_ingestion(kb_dir=kb_dir, reset=reset, session_id=session_id)
         
         return IngestResponse(
             status="success",

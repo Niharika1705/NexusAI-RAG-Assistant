@@ -2,6 +2,8 @@ import os
 import sys
 import logging
 import streamlit as st
+import uuid
+import shutil
 
 # Ensure project root is in sys.path so backend imports work cleanly when running streamlit from anywhere
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -10,6 +12,7 @@ if PROJECT_ROOT not in sys.path:
 
 from backend.ingest.pipeline import run_ingestion, save_uploaded_file
 from backend.rag.generator import query_rag
+from backend.rag.vectorstore import get_vectorstore
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
@@ -156,6 +159,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "processed_files" not in st.session_state:
     st.session_state.processed_files = set()
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
 
 # Sidebar: Knowledge Base Manager
 with st.sidebar:
@@ -163,7 +168,7 @@ with st.sidebar:
     st.caption("Production-Ready Knowledge Base & Indexing Manager")
     st.divider()
 
-    kb_dir = os.path.join(PROJECT_ROOT, "backend", "knowledge_base")
+    kb_dir = os.path.join(PROJECT_ROOT, "backend", "knowledge_base", st.session_state.session_id)
     if not os.path.exists(kb_dir):
         os.makedirs(kb_dir, exist_ok=True)
 
@@ -199,7 +204,7 @@ with st.sidebar:
                 
                 st.write("Running PDF splitting and embedding pipeline...")
                 try:
-                    count = run_ingestion(kb_dir=kb_dir, reset=True)
+                    count = run_ingestion(kb_dir=kb_dir, reset=True, session_id=st.session_state.session_id)
                     status.update(label=f"Successfully indexed {count} chunks!", state="complete", expanded=False)
                     st.success(f"Indexed {count} chunks across {len(os.listdir(kb_dir))} files.")
                 except Exception as e:
@@ -208,7 +213,17 @@ with st.sidebar:
 
     st.divider()
     if st.button("🗑️ Clear Chat", use_container_width=True):
+        # Clean up session data
+        try:
+            vs = get_vectorstore()
+            vs._collection.delete(where={"session_id": st.session_state.session_id})
+        except Exception as e:
+            logger.warning(f"Could not clear vectorstore for session {st.session_state.session_id}: {e}")
+            
+        shutil.rmtree(kb_dir, ignore_errors=True)
+        
         st.session_state.messages = []
+        st.session_state.processed_files = set()
         st.rerun()
 
     st.divider()
@@ -250,7 +265,7 @@ if query := st.chat_input("Ask a question about your indexed PDF documents..."):
     with st.chat_message("assistant"):
         with st.spinner("Retrieving relevant chunks and generating answer..."):
             try:
-                result = query_rag(question=query, k=5)
+                result = query_rag(question=query, k=5, session_id=st.session_state.session_id)
                 answer = result.get("answer", "No answer generated.")
                 sources = result.get("sources", [])
             except Exception as e:

@@ -28,7 +28,8 @@ def run_ingestion(
     kb_dir: str = DEFAULT_KB_DIR,
     chunk_size: int = 1000,
     chunk_overlap: int = 200,
-    reset: bool = True
+    reset: bool = True,
+    session_id: str = None
 ) -> int:
     """
     Runs the full ingestion pipeline:
@@ -40,7 +41,7 @@ def run_ingestion(
     logger.info("Starting ingestion pipeline...")
     
     # Step 1: Read all PDFs
-    documents = load_all_pdfs(kb_dir=kb_dir)
+    documents = load_all_pdfs(kb_dir=kb_dir, session_id=session_id)
     if not documents:
         logger.warning("No documents loaded. Ingestion pipeline terminated early.")
         return 0
@@ -56,6 +57,6 @@ def run_ingestion(
         return 0
 
     # Step 3: Store in Chroma
-    count = store_documents(chunks=chunks, reset=reset)
+    count = store_documents(chunks=chunks, reset=reset, session_id=session_id)
     logger.info(f"Ingestion pipeline completed successfully! Total chunks indexed: {count}")
     return count

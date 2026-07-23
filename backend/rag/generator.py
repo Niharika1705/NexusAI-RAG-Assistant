@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
-from backend.config import OPENROUTER_API_KEY, OPENROUTER_MODEL
+from backend.config import MISTRAL_API_KEY, MISTRAL_MODEL
 from .retriever import retrieve_relevant_chunks
 
 logger = logging.getLogger(__name__)
@@ -24,27 +24,27 @@ Question:
 
 Answer:"""
 
-def get_openrouter_llm() -> ChatOpenAI:
+def get_mistral_llm() -> ChatOpenAI:
     """
-    Configures and returns the OpenRouter LLM using ChatOpenAI.
+    Configures and returns the Mistral LLM using ChatOpenAI.
     Enforces Requirement 9: temperature=0, max_tokens=400.
     """
-    if not OPENROUTER_API_KEY:
-        logger.warning("OPENROUTER_API_KEY is not set in environment variables.")
+    if not MISTRAL_API_KEY:
+        logger.warning("MISTRAL_API_KEY is not set in environment variables.")
 
-    logger.info(f"Initializing OpenRouter LLM (model: {OPENROUTER_MODEL}, temp=0, max_tokens=400)")
+    logger.info(f"Initializing Mistral LLM (model: {MISTRAL_MODEL}, temp=0, max_tokens=400)")
 
     return ChatOpenAI(
-        model=OPENROUTER_MODEL,
-        base_url="https://openrouter.ai/api/v1",
-        api_key=OPENROUTER_API_KEY,
+        model=MISTRAL_MODEL,
+        base_url="https://api.mistral.ai/v1",
+        api_key=MISTRAL_API_KEY,
         temperature=0,
         max_tokens=400
     )
 
 def generate_answer(question: str, context_docs: List[Document]) -> Dict[str, Any]:
     """
-    Generates an answer from the retrieved chunks using OpenRouter LLM and strictly formatted RAG prompt.
+    Generates an answer from the retrieved chunks using Mistral LLM and strictly formatted RAG prompt.
     Returns the answer and formatted source metadata (source document name and page number).
     """
     if not context_docs:
@@ -63,7 +63,7 @@ def generate_answer(question: str, context_docs: List[Document]) -> Dict[str, An
     prompt = RAG_PROMPT_TEMPLATE.format(context=context_str, question=question)
 
     try:
-        llm = get_openrouter_llm()
+        llm = get_mistral_llm()
         response = llm.invoke(prompt)
         answer_text = response.content.strip()
 
@@ -84,19 +84,19 @@ def generate_answer(question: str, context_docs: List[Document]) -> Dict[str, An
             "chunks": context_docs
         }
     except Exception as e:
-        logger.error(f"Error generating answer with OpenRouter: {str(e)}", exc_info=True)
+        logger.error(f"Error generating answer with Mistral: {str(e)}", exc_info=True)
         return {
-            "answer": f"Error communicating with OpenRouter LLM: {str(e)}",
+            "answer": f"Error communicating with Mistral LLM: {str(e)}",
             "sources": [],
             "chunks": context_docs
         }
 
-def query_rag(question: str, k: int = 5) -> Dict[str, Any]:
+def query_rag(question: str, k: int = 5, session_id: str = None) -> Dict[str, Any]:
     """
     High-level wrapper function:
     1. Retrieves top k relevant chunks from Chroma Cloud.
-    2. Generates context-bounded answer with OpenRouter.
+    2. Generates context-bounded answer with Mistral.
     3. Returns structured dict with answer and source citations.
     """
-    chunks = retrieve_relevant_chunks(query=question, k=k)
+    chunks = retrieve_relevant_chunks(query=question, k=k, session_id=session_id)
     return generate_answer(question=question, context_docs=chunks)

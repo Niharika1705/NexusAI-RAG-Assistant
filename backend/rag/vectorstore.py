@@ -47,21 +47,21 @@ def get_vectorstore(collection_name: str = COLLECTION_NAME) -> Chroma:
     )
     return vectorstore
 
-def store_documents(chunks: List[Document], collection_name: str = COLLECTION_NAME, reset: bool = True) -> int:
+def store_documents(chunks: List[Document], collection_name: str = COLLECTION_NAME, reset: bool = True, session_id: str = None) -> int:
     """
     Stores document chunks into Chroma Cloud or DB.
-    If reset is True, clears existing collection first before storing new chunks.
+    If reset is True, clears existing collection (or user's documents if session_id provided) before storing new chunks.
     Returns the number of chunks stored.
     """
     if not chunks:
         logger.warning("No chunks provided to store.")
         return 0
 
-    logger.info(f"Storing {len(chunks)} chunks into Chroma collection '{collection_name}' (reset={reset})...")
+    logger.info(f"Storing {len(chunks)} chunks into Chroma collection '{collection_name}' (reset={reset}, session_id={session_id})...")
     client = get_chroma_client()
     embedding_model = get_embedding_model()
 
-    if reset:
+    if reset and not session_id:
         try:
             client.delete_collection(name=collection_name)
             logger.info(f"Existing collection '{collection_name}' deleted for re-indexing.")
@@ -73,6 +73,13 @@ def store_documents(chunks: List[Document], collection_name: str = COLLECTION_NA
         collection_name=collection_name,
         embedding_function=embedding_model
     )
+
+    if reset and session_id:
+        try:
+            vectorstore._collection.delete(where={"session_id": session_id})
+            logger.info(f"Deleted existing documents for session '{session_id}' before re-indexing.")
+        except Exception as e:
+            logger.info(f"Could not delete documents for session '{session_id}': {str(e)}")
 
     batch_size = 100
     total_stored = 0
@@ -89,9 +96,14 @@ def store_documents(chunks: List[Document], collection_name: str = COLLECTION_NA
     logger.info(f"Successfully indexed and stored {total_stored} chunks across collection '{collection_name}'.")
     return total_stored
 
-def get_retriever(k: int = 5, collection_name: str = COLLECTION_NAME):
+def get_retriever(k: int = 5, collection_name: str = COLLECTION_NAME, session_id: str = None):
     """
     Returns a LangChain retriever configured to fetch the top `k` (default: 5) most relevant chunks.
     """
     vectorstore = get_vectorstore(collection_name=collection_name)
-    return vectorstore.as_retriever(search_kwargs={"k": k})
+    
+    search_kwargs = {"k": k}
+    if session_id:
+        search_kwargs["filter"] = {"session_id": session_id}
+        
+    return vectorstore.as_retriever(search_kwargs=search_kwargs)
