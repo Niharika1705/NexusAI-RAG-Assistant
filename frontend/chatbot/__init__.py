@@ -1,0 +1,3 @@
+"""
+Chatbot Streamlit frontend submodule.
+"""
